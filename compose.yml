@@ -1,0 +1,29 @@
+services:
+  valheim:
+    image: ghcr.io/community-valheim-tools/valheim-server:latest
+    container_name: valheim-server
+    cap_add:
+      - sys_nice # Allows the server to prioritize its CPU thread to prevent lag
+    # network_mode: host bypasses Docker NAT/proxy overhead for the lowest UDP latency on Linux
+    network_mode: host
+    # ports:
+    #   - 2456-2458:2456-2458/udp
+    environment:
+      - SERVER_NAME=ValheimHard
+      - WORLD_NAME=valheimhard
+      - SERVER_PASS=12345 # Min 5 chars. Cannot be part of the server name.
+      - SERVER_PUBLIC=true
+      - TZ=Africa/Johannesburg # Syncs automatic backups and restarts to your local timezone
+      - CROSSPLAY=false # Disabled to use direct Steam Networking instead of high-latency PlayFab relays
+      - BACKUPS=true # Creates automatic zip backups of your world
+      - UPDATE_CRON=0 4 * * * # Checks for updates once daily at 4:00 AM instead of every 15 min
+      - RESTART_CRON=0 5 * * * # Automatically restarts at 5:00 AM daily
+      - SERVER_ARGS=-preset hard
+      - BEPINEX=true
+      - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
+      - PRE_SERVER_RUN_HOOK=mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/
+    volumes:
+      - ./config:/config
+      - ./data:/opt/valheim
+    restart: unless-stopped
+    stop_grace_period: 2m # Gives the server time to save the world before Docker kills it

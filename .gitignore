@@ -1,0 +1,10 @@
+# SteamCMD server binaries downloaded on first run
+data/
+
+# Server-generated auto backups and caches
+config/backups/
+config/cache/
+
+# Python bytecode
+__pycache__/
+*.pyc

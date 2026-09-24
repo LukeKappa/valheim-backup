@@ -1,0 +1,13 @@
+[Unit]
+Description=Valheim Server Auto-Pause and Wake-on-Connect Daemon
+After=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/luke/Projects/valheim-autopause.py
+Restart=always
+RestartSec=10
+Environment=IDLE_MINUTES=15
+
+[Install]
+WantedBy=default.target
