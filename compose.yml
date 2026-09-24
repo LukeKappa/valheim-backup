@@ -20,6 +20,8 @@ services:
       - RESTART_CRON=0 5 * * * # Automatically restarts at 5:00 AM daily
       - SERVER_ARGS=-preset hard
       - BEPINEX=true
+      # Automatically downloads and restores world save + BepInEx mods on first launch if /config is empty (e.g. fresh Dockge stack)
+      - PRE_BOOTSTRAP_HOOK=[ ! -d /config/worlds_local/valheimhard ] && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
       - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
       - PRE_SERVER_RUN_HOOK=mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/
     volumes:
