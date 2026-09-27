@@ -4,6 +4,7 @@ data/
 # Server-generated auto backups and caches
 config/backups/
 config/cache/
+*.tar.gz
 
 # Python bytecode
 __pycache__/
