@@ -20,13 +20,11 @@ services:
       - RESTART_CRON=0 5 * * * # Automatically restarts at 5:00 AM daily
       - SERVER_ARGS=-preset hard
       - BEPINEX=true
-      # Set to 'true' in Dockge whenever you want to pull/sync the latest world save from GitHub, then set back to 'false'
-      - FORCE_RESTORE_FROM_GITHUB=false
-      # Automatically downloads world save + BepInEx mods on first launch (or when FORCE_RESTORE_FROM_GITHUB=true)
-      - PRE_BOOTSTRAP_HOOK=([ "$$FORCE_RESTORE_FROM_GITHUB" = "true" ] || [ ! -d /config/worlds_local/valheimhard ]) && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
+      # Only downloads world save if /config/worlds_local/valheimhard does not exist at all (never overwrites existing worlds)
+      - PRE_BOOTSTRAP_HOOK=[ ! -d /config/worlds_local/valheimhard ] && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
       - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
-      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart
-      - PRE_SERVER_RUN_HOOK=[ -f /config/bepinex/update-mods.sh ] && bash /config/bepinex/update-mods.sh || (mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/)
+      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart (never touches world saves)
+      - PRE_SERVER_RUN_HOOK=curl -fsSL https://raw.githubusercontent.com/LukeKappa/valheim-backup/main/config/bepinex/update-mods.sh | bash
     volumes:
       - ./config:/config
       - ./data:/opt/valheim

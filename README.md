@@ -40,13 +40,11 @@ services:
       - RESTART_CRON=0 5 * * *
       - SERVER_ARGS=-preset hard
       - BEPINEX=true
-      # Set to 'true' in Dockge whenever you want to force sync the latest world save from GitHub, then set back to 'false'
-      - FORCE_RESTORE_FROM_GITHUB=false
-      # Automatically downloads world save + BepInEx mods on first launch (or when FORCE_RESTORE_FROM_GITHUB=true)
-      - PRE_BOOTSTRAP_HOOK=([ "$$FORCE_RESTORE_FROM_GITHUB" = "true" ] || [ ! -d /config/worlds_local/valheimhard ]) && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
+      # Only downloads world save if /config/worlds_local/valheimhard does not exist (never touches existing worlds)
+      - PRE_BOOTSTRAP_HOOK=[ ! -d /config/worlds_local/valheimhard ] && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
       - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
-      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart
-      - PRE_SERVER_RUN_HOOK=[ -f /config/bepinex/update-mods.sh ] && bash /config/bepinex/update-mods.sh || (mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/)
+      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart (never touches world saves)
+      - PRE_SERVER_RUN_HOOK=curl -fsSL https://raw.githubusercontent.com/LukeKappa/valheim-backup/main/config/bepinex/update-mods.sh | bash
     volumes:
       - ./config:/config
       - ./data:/opt/valheim
@@ -56,25 +54,17 @@ services:
 
 ---
 
-## 🔄 Updates & Mod Management
+## 🔄 How Updates Work
 
-### 1. How Valheim Updates (Base Game)
-- The container uses SteamCMD to check for game updates on **every container restart**, plus daily at 4:00 AM (`UPDATE_CRON`).
-- To update Valheim when a game patch drops: click **Restart** on the stack in Dockge.
+### 1. Game Updates (Base Valheim)
+- SteamCMD checks for game updates on **every container restart**, plus daily at 4:00 AM (`UPDATE_CRON`).
+- To apply a new game patch: click **Restart** (or **Deploy**) on the stack in Dockge.
 
-### 2. How Mods Auto-Update
-- `PRE_SERVER_RUN_HOOK` executes `update-mods.sh` on every server boot.
-- It queries the GitHub Releases API for the latest releases of:
-  - `Valheim-Modding/Jotunn`
-  - `MidnightsFX/Valheim-Community-Patch`
-  - `MidnightsFX/Valheim-Network-Performance-System`
-- When newer versions exist, it automatically downloads and replaces the `.dll` files in `./config/bepinex/plugins/` and syncs them to BepInEx before the server starts.
+### 2. Mod Updates (BepInEx Plugins)
+- On every container start/restart, `PRE_SERVER_RUN_HOOK` fetches and executes `update-mods.sh` directly from GitHub.
+- It queries GitHub Releases for the latest versions of **Jotunn**, **ValheimCommunityPatch**, and **NetworkPerformanceSystem**, downloads updated `.dll` files into `./config/bepinex/plugins/`, and syncs them to BepInEx before launching the game.
+- It **only** touches `./config/bepinex/plugins/` and **never** touches your world save.
 
-### 3. How to Pull the Latest World Save to Dockge
-If you want to pull the latest world save from GitHub onto your Dockge server:
-1. In Dockge, edit the stack and change:
-   ```yaml
-   - FORCE_RESTORE_FROM_GITHUB=true
-   ```
-2. Click **Deploy** / **Update**. The server boots, downloads the latest world save from GitHub, and restores it into `./config/worlds_local/valheimhard`.
-3. Change it back to `FORCE_RESTORE_FROM_GITHUB=false` and Deploy so subsequent restarts keep in-game progress.
+### 3. World Save Safety
+- The world save in `./config/worlds_local/` is 100% persistent on the host.
+- `PRE_BOOTSTRAP_HOOK` has an explicit guard `[ ! -d /config/worlds_local/valheimhard ]` so it will **never** overwrite your active world save.
