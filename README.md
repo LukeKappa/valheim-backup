@@ -10,20 +10,15 @@ Turnkey Docker configuration, BepInEx mods, and world save backup for the `Valhe
 - **Network Mode:** `host` (UDP ports 2456-2458)
 - **Container Image:** `ghcr.io/community-valheim-tools/valheim-server:latest`
 - **Installed BepInEx Plugins:**
-  - `ValheimCommunityPatch`
-  - `NetworkPerformanceSystem`
-  - `Jotunn` (the Valheim Library)
+  - `ValheimCommunityPatch` (auto-updated from GitHub)
+  - `NetworkPerformanceSystem` (auto-updated from GitHub)
+  - `Jotunn` (auto-updated from GitHub)
 
 ---
 
-## 🚀 1-Click Setup in Dockge (No SSH Needed)
+## 🚀 Dockge Deployment
 
-To deploy this server directly inside the **Dockge Web UI**:
-
-1. Open your Dockge web interface (`http://<server-ip>:5001`).
-2. Click **+ Compose** in the top navigation.
-3. Set **Stack Name** to `valheim-server` (or `valheim`).
-4. Paste the following YAML directly into the Dockge editor:
+Paste the following YAML directly into your Dockge stack editor:
 
 ```yaml
 services:
@@ -45,10 +40,13 @@ services:
       - RESTART_CRON=0 5 * * *
       - SERVER_ARGS=-preset hard
       - BEPINEX=true
-      # Automatically downloads and restores world save + BepInEx mods on first launch if /config is empty
-      - PRE_BOOTSTRAP_HOOK=[ ! -d /config/worlds_local/valheimhard ] && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
+      # Set to 'true' in Dockge whenever you want to force sync the latest world save from GitHub, then set back to 'false'
+      - FORCE_RESTORE_FROM_GITHUB=false
+      # Automatically downloads world save + BepInEx mods on first launch (or when FORCE_RESTORE_FROM_GITHUB=true)
+      - PRE_BOOTSTRAP_HOOK=([ "$$FORCE_RESTORE_FROM_GITHUB" = "true" ] || [ ! -d /config/worlds_local/valheimhard ]) && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
       - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
-      - PRE_SERVER_RUN_HOOK=mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/
+      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart
+      - PRE_SERVER_RUN_HOOK=[ -f /config/bepinex/update-mods.sh ] && bash /config/bepinex/update-mods.sh || (mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/)
     volumes:
       - ./config:/config
       - ./data:/opt/valheim
@@ -56,45 +54,27 @@ services:
     stop_grace_period: 2m
 ```
 
-5. Click **Deploy**.
-
-#### How it works:
-- On the very first run, the container detects that `./config` is empty on the new PC.
-- It automatically downloads `valheim-server-config.tar.gz` from GitHub, extracting your **world save (`valheimhard`)**, **BepInEx plugins (`Jotunn`, `ValheimCommunityPatch`, `NetworkPerformanceSystem`)**, and all configuration files directly into `./config`.
-- SteamCMD downloads the game binaries into `./data`.
-- For all future restarts, `./config` already has your world and files saved locally, so it never downloads again and writes all progress straight to your disk.
-
 ---
 
-## Alternative: Standard CLI Deploy
+## 🔄 Updates & Mod Management
 
-If you prefer standard Docker Compose via terminal:
+### 1. How Valheim Updates (Base Game)
+- The container uses SteamCMD to check for game updates on **every container restart**, plus daily at 4:00 AM (`UPDATE_CRON`).
+- To update Valheim when a game patch drops: click **Restart** on the stack in Dockge.
 
-```bash
-git clone https://github.com/LukeKappa/valheim-backup.git valheim-server
-cd valheim-server
-docker compose up -d
-```
+### 2. How Mods Auto-Update
+- `PRE_SERVER_RUN_HOOK` executes `update-mods.sh` on every server boot.
+- It queries the GitHub Releases API for the latest releases of:
+  - `Valheim-Modding/Jotunn`
+  - `MidnightsFX/Valheim-Community-Patch`
+  - `MidnightsFX/Valheim-Network-Performance-System`
+- When newer versions exist, it automatically downloads and replaces the `.dll` files in `./config/bepinex/plugins/` and syncs them to BepInEx before the server starts.
 
----
-
-## Auto-Pause & Auto-Wake Daemon (Optional)
-
-The included `valheim-autopause.py` script automatically pauses the Docker container when 0 players have been connected for 15 minutes, and instantly wakes it up when an incoming UDP packet hits game port 2456.
-
-```bash
-mkdir -p ~/.config/systemd/user/
-cp valheim-autopause.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now valheim-autopause.service
-```
-
----
-
-## Laptop Server (Lid Close Settings)
-
-If running the server on a laptop that you want to keep closed without sleeping:
-```bash
-chmod +x setup-lid.sh
-sudo ./setup-lid.sh
-```
+### 3. How to Pull the Latest World Save to Dockge
+If you want to pull the latest world save from GitHub onto your Dockge server:
+1. In Dockge, edit the stack and change:
+   ```yaml
+   - FORCE_RESTORE_FROM_GITHUB=true
+   ```
+2. Click **Deploy** / **Update**. The server boots, downloads the latest world save from GitHub, and restores it into `./config/worlds_local/valheimhard`.
+3. Change it back to `FORCE_RESTORE_FROM_GITHUB=false` and Deploy so subsequent restarts keep in-game progress.

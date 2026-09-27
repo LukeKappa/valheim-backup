@@ -16,14 +16,17 @@ services:
       - TZ=Africa/Johannesburg # Syncs automatic backups and restarts to your local timezone
       - CROSSPLAY=false # Disabled to use direct Steam Networking instead of high-latency PlayFab relays
       - BACKUPS=true # Creates automatic zip backups of your world
-      - UPDATE_CRON=0 4 * * * # Checks for updates once daily at 4:00 AM instead of every 15 min
+      - UPDATE_CRON=0 4 * * * # Checks for game updates once daily at 4:00 AM instead of every 15 min
       - RESTART_CRON=0 5 * * * # Automatically restarts at 5:00 AM daily
       - SERVER_ARGS=-preset hard
       - BEPINEX=true
-      # Automatically downloads and restores world save + BepInEx mods on first launch if /config is empty (e.g. fresh Dockge stack)
-      - PRE_BOOTSTRAP_HOOK=[ ! -d /config/worlds_local/valheimhard ] && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
+      # Set to 'true' in Dockge whenever you want to pull/sync the latest world save from GitHub, then set back to 'false'
+      - FORCE_RESTORE_FROM_GITHUB=false
+      # Automatically downloads world save + BepInEx mods on first launch (or when FORCE_RESTORE_FROM_GITHUB=true)
+      - PRE_BOOTSTRAP_HOOK=([ "$$FORCE_RESTORE_FROM_GITHUB" = "true" ] || [ ! -d /config/worlds_local/valheimhard ]) && echo "Downloading Valheim world and mods from GitHub..." && curl -fsSL https://github.com/LukeKappa/valheim-backup/releases/download/v2026.09.24/valheim-server-config.tar.gz | tar -xz -C /config
       - PRE_BEPINEX_CONFIG_HOOK=[ -n "$$plugins_path" ] && mkdir -p "$$plugins_path"
-      - PRE_SERVER_RUN_HOOK=mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/
+      # Auto-updater for BepInEx plugins (Jotunn, ValheimCommunityPatch, NetworkPerformanceSystem) on restart
+      - PRE_SERVER_RUN_HOOK=[ -f /config/bepinex/update-mods.sh ] && bash /config/bepinex/update-mods.sh || (mkdir -p /opt/valheim/bepinex/BepInEx/plugins && [ -d /config/bepinex/plugins ] && rsync -a --delete /config/bepinex/plugins/ /opt/valheim/bepinex/BepInEx/plugins/)
     volumes:
       - ./config:/config
       - ./data:/opt/valheim
